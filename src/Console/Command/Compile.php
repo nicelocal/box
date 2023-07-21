@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace KevinGH\Box\Console\Command;
 
-use Amp\MultiReasonException;
+use Amp\CompositeException;
 use Fidry\Console\Command\Command;
 use Fidry\Console\Command\CommandAware;
 use Fidry\Console\Command\CommandAwareness;
@@ -491,7 +491,7 @@ final class Compile implements CommandAware
             $box->addFiles($config->getFiles(), false);
 
             return;
-        } catch (MultiReasonException $ampFailure) {
+        } catch (CompositeException $ampFailure) {
             // Continue
         }
 

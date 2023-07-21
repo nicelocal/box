@@ -14,7 +14,8 @@ declare(strict_types=1);
 
 namespace KevinGH\Box;
 
-use Amp\MultiReasonException;
+use Amp\CompositeException;
+use Amp\Parallel\Worker\ContextWorkerPool;
 use BadMethodCallException;
 use Countable;
 use Humbug\PhpScoper\Symbol\SymbolsRegistry;
@@ -25,13 +26,15 @@ use KevinGH\Box\Phar\CompressionAlgorithm;
 use KevinGH\Box\Pharaoh\Pharaoh;
 use KevinGH\Box\PhpScoper\NullScoper;
 use KevinGH\Box\PhpScoper\Scoper;
+use KevinGH\Box\Tasks\InitTask;
+use KevinGH\Box\Tasks\ProcessorTask;
 use Phar;
 use RecursiveDirectoryIterator;
 use RuntimeException;
 use SplFileInfo;
 use Webmozart\Assert\Assert;
-use function Amp\ParallelFunctions\parallelMap;
-use function Amp\Promise\wait;
+use function Amp\async;
+use function Amp\Future\await;
 use function array_filter;
 use function array_map;
 use function array_unshift;
@@ -292,7 +295,7 @@ final class Box implements Countable
     /**
      * @param array<SplFileInfo|string> $files
      *
-     * @throws MultiReasonException
+     * @throws CompositeException
      */
     public function addFiles(array $files, bool $binary): void
     {
@@ -423,6 +426,16 @@ final class Box implements Countable
             return array_map($processFile, $files);
         }
 
+        $pool = new ContextWorkerPool();
+
+        $workers = [];
+        for ($x = 0; $x < ContextWorkerPool::DEFAULT_WORKER_LIMIT; ++$x) {
+            $workers[] = $pool->getWorker();
+        }
+        foreach ($workers as $worker) {
+            $worker->submit(new InitTask($mapFile, $compactors));
+        }
+
         // In the case of parallel processing, an issue is caused due to the statefulness nature of the PhpScoper
         // symbols registry.
         //
@@ -436,7 +449,11 @@ final class Box implements Countable
         // This process is allowed thanks to the nature of the state of the symbols registries: having redundant classes or
         // functions registered can easily be deal with so merging all those different states is actually
         // straightforward.
-        $tuples = wait(parallelMap($files, $processFile));
+        $futures = [];
+        foreach ($files as $file) {
+            $futures[] = async($pool->submit(...), new ProcessorTask($file));
+        }
+        $tuples = await($futures);
 
         if ([] === $tuples) {
             return [];

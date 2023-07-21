@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace KevinGH\Box\Amp;
 
-use Amp\MultiReasonException;
+use Amp\CompositeException;
 use KevinGH\Box\NotInstantiable;
 use Throwable;
 use function array_map;
@@ -27,7 +27,7 @@ final class FailureCollector
     /**
      * @return list<string>
      */
-    public static function collectReasons(MultiReasonException $exception): array
+    public static function collectReasons(CompositeException $exception): array
     {
         return array_unique(
             array_map(
